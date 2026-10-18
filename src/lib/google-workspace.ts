@@ -107,11 +107,43 @@ const sheetsUrl = (path: string, params?: Record<string, string>) => {
   return url.toString()
 }
 
+type SheetProperties = {
+  sheetId?: number
+  title?: string
+  gridProperties?: { columnCount?: number }
+}
+
+const getSheetProperties = async (title: string) => {
+  const response = await googleRequest<{ sheets?: Array<{ properties?: SheetProperties }> }>({
+    url: sheetsUrl('', { fields: 'sheets(properties(sheetId,title,gridProperties(columnCount)))' }),
+    method: 'GET'
+  })
+
+  const properties = response.sheets?.find(item => item.properties?.title === title)?.properties
+
+  if (!properties || typeof properties.sheetId !== 'number') throw new GoogleWorkspaceError(`Tab ${title} tidak ditemukan di spreadsheet.`, 404)
+
+  return properties
+}
+
+const columnLabelToIndex = (label: string) => {
+  let index = 0
+
+  for (const character of label) index = index * 26 + character.charCodeAt(0) - 64
+
+  return index - 1
+}
+
 const getSheetValues = async (sheet: SheetKey) => {
   const config = sheetConfig[sheet]
+  const properties = await getSheetProperties(config.title)
+  const configuredEnd = config.defaultRange.split(':')[1] ?? 'A'
+  const minimumColumnCount = columnLabelToIndex(configuredEnd) + 1
+  const currentColumnCount = properties.gridProperties?.columnCount ?? minimumColumnCount
+  const readEnd = toColumnLabel(Math.max(1, currentColumnCount) - 1)
 
   const response = await googleRequest<{ values?: string[][] }>({
-    url: sheetsUrl(`/values/${encodeURIComponent(`${config.title}!${config.defaultRange}`)}`, { majorDimension: 'ROWS', valueRenderOption: 'FORMATTED_VALUE' }),
+    url: sheetsUrl(`/values/${encodeURIComponent(`${config.title}!A:${readEnd}`)}`, { majorDimension: 'ROWS', valueRenderOption: 'FORMATTED_VALUE' }),
     method: 'GET'
   })
 
@@ -119,6 +151,31 @@ const getSheetValues = async (sheet: SheetKey) => {
   const headers = (values[0] ?? []).map(String)
 
   return { config, headers, values: values.slice(1) }
+}
+
+const ensureSheetGridColumns = async (title: string, requiredColumnCount: number) => {
+  const properties = await getSheetProperties(title)
+
+  const currentColumnCount = properties.gridProperties?.columnCount ?? 0
+
+  if (currentColumnCount >= requiredColumnCount) return
+
+  await googleRequest({
+    url: sheetsUrl(':batchUpdate'),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    data: {
+      requests: [
+        {
+          appendDimension: {
+            sheetId: properties.sheetId,
+            dimension: 'COLUMNS',
+            length: requiredColumnCount - currentColumnCount
+          }
+        }
+      ]
+    }
+  })
 }
 
 const ensureHeaders = async (sheet: SheetKey, headers: string[], requiredHeaders: string[]) => {
@@ -130,6 +187,8 @@ const ensureHeaders = async (sheet: SheetKey, headers: string[], requiredHeaders
   const nextHeaders = [...headers, ...missing]
   const start = toColumnLabel(headers.length)
   const end = toColumnLabel(nextHeaders.length - 1)
+
+  await ensureSheetGridColumns(config.title, nextHeaders.length)
 
   await googleRequest({
     url: sheetsUrl(`/values/${encodeURIComponent(`${config.title}!${start}1:${end}1`)}`, { valueInputOption: 'USER_ENTERED' }),
