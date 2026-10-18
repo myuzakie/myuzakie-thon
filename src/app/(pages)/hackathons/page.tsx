@@ -1,6 +1,7 @@
 import { ExternalLink, FolderOpen, Plus, ShieldAlert } from 'lucide-react'
 
 import { PageHeader } from '@/components/hackathon/page-header'
+import { LiveSheetTable } from '@/components/hackathon/live-sheet-table'
 import { SourceLink } from '@/components/hackathon/source-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,29 @@ const HackathonsPage = () => (
   <div className='space-y-6'>
     <PageHeader eyebrow='Workspace / Events' title='Hackathons' description='Kelola shortlist kompetisi, deadline, eligibility, dan sumber riset dalam satu daftar.' action={<Button className='gap-2'><Plus className='size-4' /> Tambah event</Button>} />
     <SourceLink tab='events' />
+    <LiveSheetTable
+      sheet='events'
+      idKey='Event_ID'
+      title='Live event records'
+      driveUploads
+      filterKey='Verification_Status'
+      columns={[
+        { key: 'Event_ID', label: 'ID' },
+        { key: 'Event_Name', label: 'Event' },
+        { key: 'Deadline_WIB', label: 'Deadline' },
+        { key: 'Focus', label: 'Focus' },
+        { key: 'Verification_Status', label: 'Verification' }
+      ]}
+      fields={[
+        { key: 'Event_Name', label: 'Event name' },
+        { key: 'Organizer', label: 'Organizer' },
+        { key: 'Deadline_WIB', label: 'Deadline WIB' },
+        { key: 'Focus', label: 'Focus' },
+        { key: 'Official_URL', label: 'Official URL' },
+        { key: 'Verification_Status', label: 'Verification status' }
+      ]}
+      initialRows={events.map(event => ({ Event_ID: event.id, Event_Name: event.name, Deadline_WIB: event.deadline, Focus: event.focus, Verification_Status: event.verification, Drive_Folder: event.driveFolder }))}
+    />
     <div className='grid gap-4 sm:grid-cols-3'>
       {[['4', 'Event dilacak'], ['0', 'Eligibility terkonfirmasi'], ['2', 'Konflik sumber']].map(([value, label]) => <Card key={label} className='shadow-none'><CardContent className='p-5'><p className='text-3xl font-semibold'>{value}</p><p className='text-muted-foreground mt-1 text-sm'>{label}</p></CardContent></Card>)}
     </div>
