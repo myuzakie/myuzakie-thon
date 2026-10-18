@@ -125,7 +125,7 @@ export const DriveEvidence = ({ sheet, rowId, folderUrl, fileId, evidenceUrl, ro
     <>
       {trigger ? <span className='inline-flex' onClick={openPanel}>{trigger}</span> : <Button variant='ghost' size='icon' onClick={openPanel} aria-label='Buka evidence Google Drive' title='Evidence Google Drive'><FolderOpen className='size-4' /></Button>}
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side='right' className='w-full overflow-y-auto sm:max-w-5xl'>
+        <SheetContent side='right' className='w-full overflow-y-auto sm:!max-w-[min(80vw,1100px)]'>
           <SheetHeader className='sticky top-0 z-10 border-b bg-background/95 pr-12 backdrop-blur'>
             <SheetTitle>Evidence workspace</SheetTitle>
             <SheetDescription>Kelola evidence untuk {rowId}. File yang di-upload akan ditautkan ke record dan Google Drive.</SheetDescription>
