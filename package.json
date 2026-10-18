@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "check-types": "tsc --noEmit",
     "clean": "rm -rf .next dist",
@@ -50,6 +52,7 @@
     "prettier": "3.8.3",
     "prettier-plugin-tailwindcss": "0.8.0",
     "tailwindcss": "4",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^5.0.5"
   }
 }
