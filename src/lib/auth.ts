@@ -17,8 +17,8 @@ type SessionPayload = {
 }
 
 const getAuthSecret = () => process.env.HACKATHON_AUTH_SECRET ?? ''
-const getAuthEmail = () => process.env.HACKATHON_AUTH_EMAIL ?? ''
-const getAuthPassword = () => process.env.HACKATHON_AUTH_PASSWORD ?? ''
+const getAuthEmail = () => (process.env.HACKATHON_AUTH_EMAIL ?? '').trim().toLowerCase()
+const getAuthPassword = () => (process.env.HACKATHON_AUTH_PASSWORD ?? '').trim()
 
 export const isAuthConfigured = () => Boolean(getAuthSecret() && getAuthEmail() && getAuthPassword())
 
@@ -60,7 +60,7 @@ export const verifySessionToken = (token?: string | null) => {
 }
 
 export const authenticateCredentials = (email: string, password: string) => {
-  if (!isAuthConfigured() || email !== getAuthEmail()) return false
+  if (!isAuthConfigured() || email.trim().toLowerCase() !== getAuthEmail()) return false
 
   const expected = Buffer.from(getAuthPassword())
   const received = Buffer.from(password)
