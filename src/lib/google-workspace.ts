@@ -80,7 +80,15 @@ const getClient = async (): Promise<GoogleClient> => {
 const googleRequest = async <T>(options: Parameters<GoogleClient['request']>[0]) => {
   const client = await getClient()
 
-  return (await client.request<T>(options)).data
+  try {
+    return (await client.request<T>(options)).data
+  } catch (error) {
+    const response = (error as { response?: { status?: number; data?: { error?: { message?: string } } } }).response
+    const status = typeof response?.status === 'number' ? response.status : 502
+    const message = response?.data?.error?.message ?? `Google Workspace request gagal (${status}).`
+
+    throw new GoogleWorkspaceError(message, status)
+  }
 }
 
 export const isGoogleWorkspaceConfigured = () => Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 || process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
@@ -332,6 +340,14 @@ const driveUrl = (path: string, params?: Record<string, string>) => {
   return url.toString()
 }
 
+export const driveUploadUrl = (path: string, params?: Record<string, string>) => {
+  const url = new URL(`https://www.googleapis.com/upload/drive/v3${path}`)
+
+  Object.entries(params ?? {}).forEach(([key, value]) => url.searchParams.set(key, value))
+
+  return url.toString()
+}
+
 export const uploadDriveFile = async ({ fileName, mimeType, buffer, folderId }: { fileName: string; mimeType: string; buffer: Buffer; folderId?: string }) => {
   const boundary = `hackathon-os-${Date.now().toString(36)}`
   const metadata = JSON.stringify({ name: fileName, ...(folderId ? { parents: [folderId] } : {}) })
@@ -344,7 +360,7 @@ export const uploadDriveFile = async ({ fileName, mimeType, buffer, folderId }: 
   ])
 
   return googleRequest<{ id?: string; name?: string; mimeType?: string; size?: string; webViewLink?: string; webContentLink?: string; parents?: string[]; createdTime?: string }>({
-    url: driveUrl('/upload/drive/v3/files', { uploadType: 'multipart', fields: 'id,name,mimeType,size,webViewLink,webContentLink,parents,createdTime' }),
+    url: driveUploadUrl('/files', { uploadType: 'multipart', fields: 'id,name,mimeType,size,webViewLink,webContentLink,parents,createdTime' }),
     method: 'POST',
     headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
     data: body
