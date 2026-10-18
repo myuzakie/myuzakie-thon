@@ -34,6 +34,14 @@ pnpm build
 - nilai biasa dan empty value;
 - tidak ada callback function pada column descriptor.
 
+### System UX field rules
+
+`tests/unit/ui-field-rules.test.ts` memeriksa:
+
+- inferensi currency, select, URL, textarea, dan folder link;
+- opsi select yang mempertahankan nilai eksternal;
+- deteksi URL dan prefix mata uang.
+
 ### Sheets API
 
 `tests/api/sheets-route.test.ts` memeriksa:
@@ -53,6 +61,8 @@ pnpm build
 - upload file yang diizinkan;
 - linking file ke Sheets;
 - audit log upload.
+
+`tests/unit/google-workspace.test.ts` juga memastikan endpoint multipart Drive tidak menggandakan path `/drive/v3`.
 
 ## Manual smoke test
 

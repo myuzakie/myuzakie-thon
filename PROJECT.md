@@ -81,4 +81,4 @@ Pastikan Sheets API dan Drive API aktif, spreadsheet serta folder dibagikan ke s
 
 ## Dokumentasi lanjutan
 
-Baca [AI Maintenance Guide](docs/ai-maintenance/README.md), [Project State](docs/ai-maintenance/PROJECT_STATE.md), [AI Fix Log](docs/ai-maintenance/CHANGELOG.md), dan [Testing Guide](docs/ai-maintenance/TESTING.md) sebelum melakukan perubahan berikutnya.
+Baca [AI Maintenance Guide](docs/ai-maintenance/README.md), [Project State](docs/ai-maintenance/PROJECT_STATE.md), [AI Fix Log](docs/ai-maintenance/CHANGELOG.md), [Testing Guide](docs/ai-maintenance/TESTING.md), dan [SYSTEM UX Rules](docs/ai-maintenance/SYSTEM_UX.md) sebelum melakukan perubahan berikutnya.

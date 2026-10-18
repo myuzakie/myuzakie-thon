@@ -7,7 +7,8 @@ Folder ini adalah sumber konteks pertama untuk agent yang melanjutkan project Ha
 1. `PROJECT_STATE.md` — arsitektur, alur data, dan batasan integrasi saat ini.
 2. `CHANGELOG.md` — perbaikan yang sudah dikerjakan dan alasan teknisnya.
 3. `TESTING.md` — cara menjalankan validasi serta action yang sudah dicakup test.
-4. Dokumentasi root `PROJECT.md` — panduan project yang lebih lengkap.
+4. `SYSTEM_UX.md` — rule wajib untuk setiap feature/fix UI.
+5. Dokumentasi root `PROJECT.md` — panduan project yang lebih lengkap.
 
 ## Aturan kerja agent
 

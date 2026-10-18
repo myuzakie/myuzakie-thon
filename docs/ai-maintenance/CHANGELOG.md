@@ -2,6 +2,14 @@
 
 Log ini mencatat perubahan yang sudah dilakukan agar agent berikutnya tidak mengulang diagnosis yang sama.
 
+## 2026-10-18 — Drive upload and SYSTEM UX hardening
+
+- Branch: `fix/dashboard-data-guard`
+- Commits: `e28b798a fix(drive): correct multipart upload endpoint`, `ca408a5a feat(workspace): strengthen typed record editing`, `a0224714 test(ui): cover drive transport and field rules`
+- Masalah: upload membentuk URL `/drive/v3/upload/drive/v3/files` sehingga Google mengembalikan 404 HTML; drawer terlalu sempit; detail menampilkan nilai teknis dan URL sebagai teks biasa; editor belum membedakan currency, select, URL, dan textarea.
+- Perbaikan: endpoint multipart dipisah dari Drive metadata endpoint; error provider disanitasi; drawer Evidence diperlebar; URL menjadi link aktif; raw Drive IDs dipindahkan ke System information; editor memakai rule field type; ditambahkan `SYSTEM_UX.md` sebagai gate wajib.
+- Validasi: 6 test files, 16 tests lulus; lint, type check, dan production build lulus.
+
 ## 2026-10-18 — Live table serialization and regression tests
 
 - Branch: `fix/dashboard-data-guard`
