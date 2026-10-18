@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto'
+
 import { GoogleAuth } from 'google-auth-library'
 
 import { tracker } from '@/lib/hackathon-data'
 
-export type SheetKey = keyof typeof tracker.tabs
+export type SheetKey = 'events' | 'tasks' | 'ideas' | 'resources' | 'submission' | 'dashboard' | 'audit'
 
 type SheetConfig = {
   title: string
@@ -22,16 +24,30 @@ export const sheetConfig: Record<SheetKey, SheetConfig> = {
   ideas: { title: tracker.tabs.ideas, idHeader: 'Idea_ID', defaultRange: 'A:K' },
   resources: { title: tracker.tabs.resources, idHeader: 'Resource_ID', defaultRange: 'A:G' },
   submission: { title: tracker.tabs.submission, idHeader: 'Checklist_ID', defaultRange: 'A:I' },
-  dashboard: { title: tracker.tabs.dashboard, idHeader: 'Metric', defaultRange: 'A:H' }
+  dashboard: { title: tracker.tabs.dashboard, idHeader: 'Metric', defaultRange: 'A:H' },
+  audit: { title: 'Sources_Audit', idHeader: 'Audit_ID', defaultRange: 'A:K' }
 }
+
+const stableMetadataHeaders = ['Created_At', 'Updated_At', 'Updated_By', 'Record_Status', 'Drive_File_ID', 'Drive_Folder_ID', 'Last_Synced_At']
+const auditHeaders = ['Audit_ID', 'Occurred_At', 'Action', 'Sheet', 'Record_ID', 'Updated_By', 'Before_JSON', 'After_JSON', 'Conflict_Status']
+const stableIdPrefixes: Record<SheetKey, string> = { events: 'HACK', tasks: 'T', ideas: 'IDEA', resources: 'UI', submission: 'SC', dashboard: 'METRIC', audit: 'AUDIT' }
 
 export class GoogleWorkspaceError extends Error {
   status: number
+  details?: unknown
 
-  constructor(message: string, status = 503) {
+  constructor(message: string, status = 503, details?: unknown) {
     super(message)
     this.name = 'GoogleWorkspaceError'
     this.status = status
+    this.details = details
+  }
+}
+
+export class GoogleWorkspaceConflictError extends GoogleWorkspaceError {
+  constructor(message: string, currentRecord: Record<string, string | number>) {
+    super(message, 409, { currentRecord })
+    this.name = 'GoogleWorkspaceConflictError'
   }
 }
 
@@ -126,7 +142,7 @@ const ensureHeaders = async (sheet: SheetKey, headers: string[], requiredHeaders
 }
 
 const rowToRecord = (headers: string[], row: string[], rowNumber: number) => {
-  const record: Record<string, string | number> = { _rowNumber: rowNumber }
+  const record: Record<string, string | number> = { _rowNumber: rowNumber, _version: createHash('sha256').update(JSON.stringify(headers.map((header, index) => [header, row[index] ?? '']))).digest('hex') }
 
   headers.forEach((header, index) => {
     record[header] = row[index] ?? ''
@@ -137,13 +153,18 @@ const rowToRecord = (headers: string[], row: string[], rowNumber: number) => {
 
 export const listSheetRecords = async (sheet: SheetKey) => {
   const { headers, values } = await getSheetValues(sheet)
+  const requiredHeaders = sheet === 'audit' ? [...stableMetadataHeaders, ...auditHeaders] : stableMetadataHeaders
+  const nextHeaders = await ensureHeaders(sheet, headers, requiredHeaders)
+  const syncedAt = new Date().toISOString()
+  const rows = values.map((row, index) => rowToRecord(nextHeaders, row, index + 2)).filter(row => String(row.Record_Status ?? '') !== 'Deleted')
 
-  return { headers, rows: values.map((row, index) => rowToRecord(headers, row, index + 2)) }
+  return { headers: nextHeaders, rows, syncedAt, last_synced_at: syncedAt }
 }
 
 const findRecord = async (sheet: SheetKey, id: string) => {
   const { config, headers, values } = await getSheetValues(sheet)
-  const idIndex = headers.indexOf(config.idHeader)
+  const nextHeaders = await ensureHeaders(sheet, headers, stableMetadataHeaders)
+  const idIndex = nextHeaders.indexOf(config.idHeader)
 
   if (idIndex === -1) throw new GoogleWorkspaceError(`${config.title} tidak memiliki kolom ${config.idHeader}.`, 500)
 
@@ -151,13 +172,49 @@ const findRecord = async (sheet: SheetKey, id: string) => {
 
   if (rowIndex === -1) throw new GoogleWorkspaceError(`${config.idHeader} ${id} tidak ditemukan.`, 404)
 
-  return { config, headers, row: values[rowIndex] ?? [], rowNumber: rowIndex + 2 }
+  const row = values[rowIndex] ?? []
+
+  return { config, headers: nextHeaders, row, rowNumber: rowIndex + 2, version: rowToRecord(nextHeaders, row, rowIndex + 2)._version as string, record: rowToRecord(nextHeaders, row, rowIndex + 2) }
 }
 
-export const appendSheetRecord = async (sheet: SheetKey, record: Record<string, unknown>) => {
-  const { config, headers } = await getSheetValues(sheet)
-  const nextHeaders = await ensureHeaders(sheet, headers, Object.keys(record))
-  const row = nextHeaders.map(header => String(record[header] ?? ''))
+type MutationOptions = { updatedBy?: string; expectedVersion?: string }
+
+const now = () => new Date().toISOString()
+
+const nextStableId = (sheet: SheetKey, idHeader: string, headers: string[], values: string[][]) => {
+  const prefix = stableIdPrefixes[sheet]
+  const idIndex = Math.max(0, headers.indexOf(idHeader))
+
+  const nextNumber = values.reduce((highest, row) => {
+    const match = String(row[idIndex] ?? '').match(new RegExp(`^${prefix}-(\\d+)$`))
+    const number = match ? Number(match[1]) : 0
+
+    return Math.max(highest, number)
+  }, 0) + 1
+
+  return { [idHeader]: `${prefix}-${String(nextNumber).padStart(3, '0')}` }
+}
+
+export const appendSheetRecord = async (sheet: SheetKey, record: Record<string, unknown>, options: MutationOptions = {}) => {
+  const { config, headers, values } = await getSheetValues(sheet)
+  const timestamp = now()
+
+  const preparedRecord = {
+    ...nextStableId(sheet, config.idHeader, headers, values),
+    ...record,
+    Created_At: record.Created_At ?? timestamp,
+    Updated_At: timestamp,
+    Updated_By: options.updatedBy ?? String(record.Updated_By ?? 'system'),
+    Record_Status: record.Record_Status ?? 'Active',
+    Drive_File_ID: record.Drive_File_ID ?? '',
+    Drive_Folder_ID: record.Drive_Folder_ID ?? '',
+    Last_Synced_At: timestamp,
+    [config.idHeader]: nextStableId(sheet, config.idHeader, headers, values)[config.idHeader]
+  }
+
+  const requiredHeaders = sheet === 'audit' ? [...stableMetadataHeaders, ...auditHeaders] : stableMetadataHeaders
+  const nextHeaders = await ensureHeaders(sheet, headers, [...requiredHeaders, ...Object.keys(preparedRecord)])
+  const row = nextHeaders.map(header => String(preparedRecord[header] ?? ''))
 
   const response = await googleRequest<{ updates?: { updatedRange?: string } }>({
     url: sheetsUrl(`/values/${encodeURIComponent(`${config.title}!A:${toColumnLabel(nextHeaders.length - 1)}`)}:append`, { valueInputOption: 'USER_ENTERED', insertDataOption: 'INSERT_ROWS' }),
@@ -166,13 +223,30 @@ export const appendSheetRecord = async (sheet: SheetKey, record: Record<string, 
     data: { values: [row] }
   })
 
-  return { updatedRange: response.updates?.updatedRange ?? null, record }
+  return { updatedRange: response.updates?.updatedRange ?? null, record: preparedRecord }
 }
 
-export const updateSheetRecord = async (sheet: SheetKey, id: string, changes: Record<string, unknown>) => {
+const assertCurrentVersion = (expectedVersion: string | undefined, found: Awaited<ReturnType<typeof findRecord>>) => {
+  if (expectedVersion && expectedVersion !== found.version) throw new GoogleWorkspaceConflictError('Data berubah di Google Sheets sejak terakhir disinkronkan. Refresh sebelum menyimpan lagi.', found.record)
+}
+
+export const updateSheetRecord = async (sheet: SheetKey, id: string, changes: Record<string, unknown>, options: MutationOptions = {}) => {
   const found = await findRecord(sheet, id)
-  const nextHeaders = await ensureHeaders(sheet, found.headers, Object.keys(changes))
-  const nextRow = nextHeaders.map((header, index) => String(changes[header] ?? found.row[index] ?? ''))
+
+  assertCurrentVersion(options.expectedVersion, found)
+  if (Object.prototype.hasOwnProperty.call(changes, found.config.idHeader) && String(changes[found.config.idHeader]) !== id) throw new GoogleWorkspaceError(`${found.config.idHeader} adalah primary key dan tidak dapat diubah.`, 400)
+  const timestamp = now()
+  const nextHeaders = await ensureHeaders(sheet, found.headers, [...stableMetadataHeaders, ...Object.keys(changes)])
+
+  const nextRow = nextHeaders.map((header, index) => {
+    if (header === 'Created_At') return String(found.row[index] ?? timestamp)
+    if (header === 'Updated_At' || header === 'Last_Synced_At') return timestamp
+    if (header === 'Updated_By') return options.updatedBy ?? String(found.row[index] ?? 'system')
+    if (header === 'Record_Status') return String(changes[header] ?? found.row[index] ?? 'Active')
+
+    return String(changes[header] ?? found.row[index] ?? '')
+  })
+
   const endColumn = toColumnLabel(nextHeaders.length - 1)
 
   await googleRequest({
@@ -182,21 +256,13 @@ export const updateSheetRecord = async (sheet: SheetKey, id: string, changes: Re
     data: { values: [nextRow] }
   })
 
-  return { rowNumber: found.rowNumber, id, record: rowToRecord(nextHeaders, nextRow, found.rowNumber) }
+  return { rowNumber: found.rowNumber, id, before: found.record, record: rowToRecord(nextHeaders, nextRow, found.rowNumber) }
 }
 
-export const clearSheetRecord = async (sheet: SheetKey, id: string) => {
-  const found = await findRecord(sheet, id)
-  const endColumn = toColumnLabel(found.headers.length - 1)
+export const clearSheetRecord = async (sheet: SheetKey, id: string, options: MutationOptions = {}) => {
+  const result = await updateSheetRecord(sheet, id, { Record_Status: 'Deleted' }, options)
 
-  await googleRequest({
-    url: sheetsUrl(`/values/${encodeURIComponent(`${found.config.title}!A${found.rowNumber}:${endColumn}${found.rowNumber}`)}:clear`),
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    data: {}
-  })
-
-  return { id, rowNumber: found.rowNumber }
+  return { id, rowNumber: result.rowNumber, before: result.before, record: result.record }
 }
 
 const driveUrl = (path: string, params?: Record<string, string>) => {
@@ -238,12 +304,26 @@ export const listDriveFiles = async (folderId?: string) => {
   return response.files ?? []
 }
 
-export const attachDriveFileToSheet = async ({ sheet, rowId, fileId, fileUrl }: { sheet: SheetKey; rowId: string; fileId: string; fileUrl?: string | null }) => {
+export const attachDriveFileToSheet = async ({ sheet, rowId, fileId, fileUrl, expectedVersion, updatedBy, folderId }: { sheet: SheetKey; rowId: string; fileId: string; fileUrl?: string | null; expectedVersion?: string; updatedBy?: string; folderId?: string }) => {
   const changes: Record<string, string> = { Drive_File_ID: fileId }
 
   if (fileUrl) changes.Evidence_URL = fileUrl
+  if (folderId) changes.Drive_Folder_ID = folderId
 
-  return updateSheetRecord(sheet, rowId, changes)
+  return updateSheetRecord(sheet, rowId, changes, { expectedVersion, updatedBy })
+}
+
+export const appendAuditLog = async ({ action, sheet, recordId, updatedBy, before, after, conflictStatus }: { action: string; sheet: SheetKey; recordId: string; updatedBy: string; before?: unknown; after?: unknown; conflictStatus?: string }) => {
+  return appendSheetRecord('audit', {
+    Occurred_At: now(),
+    Action: action,
+    Sheet: sheet,
+    Record_ID: recordId,
+    Updated_By: updatedBy,
+    Before_JSON: before ? JSON.stringify(before) : '',
+    After_JSON: after ? JSON.stringify(after) : '',
+    Conflict_Status: conflictStatus ?? 'none'
+  }, { updatedBy })
 }
 
 export const googleSheetId = getSpreadsheetId

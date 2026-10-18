@@ -1,41 +1,63 @@
 'use client'
 
-// Rect Import
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 
-// Next Imports
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
-// Third-party Imports
-import { EyeIcon, EyeOffIcon } from 'lucide-react'
+import { EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react'
 
-// Components Import
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 
 const LoginForm = () => {
   const [isVisible, setIsVisible] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter()
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+      const body = await response.json()
+
+      if (!response.ok) throw new Error(body.message ?? 'Login gagal')
+
+      const requestedNext = new URLSearchParams(window.location.search).get('next')
+      const nextPath = requestedNext?.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/hackathons'
+
+      router.replace(nextPath)
+      router.refresh()
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Login gagal')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
-    <form onSubmit={e => e.preventDefault()}>
+    <form onSubmit={handleSubmit}>
       <FieldGroup className='gap-4'>
-        {/* Email */}
         <Field className='gap-2'>
           <FieldLabel htmlFor='userEmail' className='leading-5'>
-            Email address*
+            Email address
           </FieldLabel>
-          <Input type='email' id='userEmail' placeholder='Enter your email address' />
+          <Input type='email' id='userEmail' placeholder='you@example.com' value={email} onChange={event => setEmail(event.target.value)} autoComplete='username' required />
         </Field>
-        {/* Password */}
         <Field className='w-full gap-2'>
           <FieldLabel htmlFor='password' className='leading-5'>
-            Password*
+            Password
           </FieldLabel>
           <InputGroup>
-            <InputGroupInput id='password' type={isVisible ? 'text' : 'password'} placeholder='••••••••••••••••' />
+            <InputGroupInput id='password' type={isVisible ? 'text' : 'password'} placeholder='••••••••••••' value={password} onChange={event => setPassword(event.target.value)} autoComplete='current-password' required />
             <InputGroupAddon align='inline-end' className='pr-1.5'>
               <Button
                 type='button'
@@ -50,22 +72,16 @@ const LoginForm = () => {
             </InputGroupAddon>
           </InputGroup>
         </Field>
-        {/* Remember Me and Forgot Password */}
-        <div className='flex items-center justify-between gap-y-2'>
-          <Field orientation='horizontal' className='flex items-center gap-2'>
-            <Checkbox id='rememberMe' />
-            <FieldLabel htmlFor='rememberMe' className='text-muted-foreground'>
-              {' '}
-              Remember Me
-            </FieldLabel>
-          </Field>
+        {error && <p className='border-destructive/30 bg-destructive/5 text-destructive rounded-md border px-3 py-2 text-sm'>{error}</p>}
+        <div className='flex items-center justify-end gap-y-2'>
           <Link href='/pages/auth/forgot-password' className='text-base text-nowrap hover:underline'>
             Forgot Password?
           </Link>
         </div>
         <Field>
-          <Button className='w-full' type='submit'>
-            Sign in to Shadcn Studio
+          <Button className='w-full gap-2' type='submit' disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className='size-4 animate-spin' />}
+            Sign in to Hackathon OS
           </Button>
         </Field>
       </FieldGroup>

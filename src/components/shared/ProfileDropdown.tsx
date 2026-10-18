@@ -1,5 +1,8 @@
+'use client'
+
 // Next Imports
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 // Third-party Imports
 import { LogOutIcon, SettingsIcon, UserIcon } from 'lucide-react'
@@ -25,6 +28,14 @@ const STATIC_USER = {
 }
 
 const ProfileDropdown = () => {
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.replace('/pages/auth/login')
+    router.refresh()
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -69,7 +80,7 @@ const ProfileDropdown = () => {
         <DropdownMenuSeparator />
 
         <DropdownMenuGroup>
-          <DropdownMenuItem variant='destructive' render={<Link href='/pages/auth/login' />}>
+          <DropdownMenuItem variant='destructive' onClick={() => void handleSignOut()}>
             <LogOutIcon />
             <span>Sign out</span>
           </DropdownMenuItem>

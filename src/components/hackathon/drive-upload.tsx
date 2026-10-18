@@ -7,7 +7,7 @@ import { Loader2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { SheetKey } from '@/lib/google-workspace'
 
-export const DriveUpload = ({ sheet, rowId, folderUrl, folderId, showLabel = false, onUploaded }: { sheet: SheetKey; rowId: string; folderUrl?: string; folderId?: string; showLabel?: boolean; onUploaded?: () => void }) => {
+export const DriveUpload = ({ sheet, rowId, folderUrl, folderId, expectedVersion, showLabel = false, onUploaded }: { sheet: SheetKey; rowId: string; folderUrl?: string; folderId?: string; expectedVersion?: string; showLabel?: boolean; onUploaded?: () => void }) => {
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
@@ -24,6 +24,7 @@ export const DriveUpload = ({ sheet, rowId, folderUrl, folderId, showLabel = fal
     formData.set('file', file)
     formData.set('sheet', sheet)
     formData.set('rowId', rowId)
+    if (expectedVersion) formData.set('expectedVersion', expectedVersion)
 
     if (folderId) formData.set('folderId', folderId)
     else if (folderUrl) {

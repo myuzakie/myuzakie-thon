@@ -33,7 +33,7 @@ const formatSize = (size?: string) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export const DriveEvidence = ({ sheet, rowId, folderUrl, fileId, evidenceUrl }: { sheet: SheetKey; rowId: string; folderUrl?: string; fileId?: string; evidenceUrl?: string }) => {
+export const DriveEvidence = ({ sheet, rowId, folderUrl, fileId, evidenceUrl, rowVersion }: { sheet: SheetKey; rowId: string; folderUrl?: string; fileId?: string; evidenceUrl?: string; rowVersion?: string }) => {
   const rootFolderId = extractFolderId(folderUrl)
   const [open, setOpen] = useState(false)
   const [folderId, setFolderId] = useState(rootFolderId)
@@ -89,7 +89,7 @@ export const DriveEvidence = ({ sheet, rowId, folderUrl, fileId, evidenceUrl }: 
                 <span className='font-mono'>{folderId || 'Drive root'}</span>
               </div>
               <div className='flex items-center gap-2'>
-                <DriveUpload sheet={sheet} rowId={rowId} folderId={folderId || undefined} showLabel onUploaded={() => void loadFiles(folderId)} />
+                <DriveUpload sheet={sheet} rowId={rowId} folderId={folderId || undefined} expectedVersion={rowVersion} showLabel onUploaded={() => void loadFiles(folderId)} />
                 <Button variant='outline' size='sm' className='gap-1.5' onClick={() => void loadFiles()} disabled={loading}>{loading ? <Loader2 className='size-3.5 animate-spin' /> : <RefreshCw className='size-3.5' />} Refresh</Button>
               </div>
             </div>

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 
+import { getSessionFromRequest, unauthorizedResponse } from '@/lib/auth'
 import { GoogleWorkspaceError, listDriveFiles } from '@/lib/google-workspace'
 
 export async function GET(request: Request) {
+  if (!getSessionFromRequest(request)) return unauthorizedResponse()
+
   try {
     const folderId = new URL(request.url).searchParams.get('folderId') ?? undefined
 

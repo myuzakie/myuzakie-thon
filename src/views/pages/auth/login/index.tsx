@@ -3,9 +3,7 @@ import Link from 'next/link'
 
 // Components Import
 import Logo from '@/components/shared/Logo'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import LoginForm from '@/views/pages/auth/login/login-form'
 
 // SVG Import
@@ -25,30 +23,12 @@ const Login = () => {
           </Link>
 
           <div>
-            <CardTitle className='mb-2 text-2xl font-semibold'>Sign in to Shadcn Studio</CardTitle>
-            <CardDescription className='text-base'>Ship Faster and Focus on Growth.</CardDescription>
+            <CardTitle className='mb-2 text-2xl font-semibold'>Sign in to Hackathon OS</CardTitle>
+            <CardDescription className='text-base'>Kelola workspace hackathon dengan aman.</CardDescription>
           </div>
         </CardHeader>
 
         <CardContent className='px-6'>
-          <p className='text-muted-foreground mb-6 text-base'>
-            Login with{' '}
-            <Link href='#' className='text-card-foreground hover:underline'>
-              Magic Link
-            </Link>
-          </p>
-
-          {/* Quick Login Buttons */}
-          <div className='mb-6 flex flex-wrap gap-4 sm:gap-6'>
-            <Button variant='outline' className='grow'>
-              Login as User
-            </Button>
-            <Button variant='outline' className='grow'>
-              Login as Admin
-            </Button>
-          </div>
-
-          {/* Login Form */}
           <div className='space-y-4'>
             <LoginForm />
 
@@ -59,15 +39,7 @@ const Login = () => {
               </Link>
             </p>
 
-            <div className='flex items-center gap-4'>
-              <Separator className='flex-1' />
-              <p className='text-base'>or</p>
-              <Separator className='flex-1' />
-            </div>
-
-            <Button variant='ghost' className='w-full' render={<Link href='#' />} nativeButton={false}>
-              Sign in with google
-            </Button>
+            <p className='text-muted-foreground border-t pt-4 text-center text-xs'>Authentication internal aktif. Credential hanya diproses di server.</p>
           </div>
         </CardContent>
       </Card>
