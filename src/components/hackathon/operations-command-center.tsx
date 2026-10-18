@@ -29,7 +29,7 @@ const parseDate = (value: string) => {
 
 const dayDifference = (date: Date, now: Date) => Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 
-const normalizeRows = (value: unknown, fallback: Row[] = []) => {
+export const normalizeRows = (value: unknown, fallback: Row[] = []) => {
   const candidate = Array.isArray(value) ? value : fallback
 
   return candidate.filter(row => Boolean(row) && typeof row === 'object' && !Array.isArray(row)) as Row[]
@@ -53,6 +53,34 @@ const loadSheetRows = async (sheet: string, fallback: Row[]) => {
 const fallbackEventRows: Row[] = fallbackEvents.map(event => ({ Event_ID: event.id, Event_Name: event.name, Deadline_WIB: event.deadline, Verification_Status: event.verification, Status: event.status, Drive_Folder: event.driveFolder }))
 const fallbackTaskRows: Row[] = fallbackTasks.map(task => ({ Task_ID: task.id, Event_ID: task.eventId, Task: task.task, Workstream: task.workstream, Priority: task.priority, Due_WIB: task.due, Status: task.status }))
 const fallbackSubmissionRows: Row[] = submissionItems.map(item => ({ Checklist_ID: item.id, Event_ID: item.eventId, Requirement: item.requirement, Category: item.category, Status: item.status }))
+
+export const calculateCommandCenterMetrics = (events: Row[], tasks: Row[], submission: Row[], now = new Date()) => {
+  const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const activeEvents = events.filter(row => !isDone(text(row, 'Status'))).length
+  const openTasks = tasks.filter(row => !isDone(text(row, 'Status')))
+  const completedTasks = tasks.filter(row => isDone(text(row, 'Status'))).length
+  const blockedTasks = openTasks.filter(row => isRisk(text(row, 'Status'))).length
+
+  const overdueTasks = openTasks.filter(row => {
+    const date = parseDate(text(row, 'Due_WIB'))
+
+    return date ? date < now : false
+  }).length
+
+  const dueSoonTasks = openTasks.filter(row => {
+    const date = parseDate(text(row, 'Due_WIB'))
+
+    return date ? date >= now && date <= nextWeek : false
+  }).length
+
+  const completedSubmission = submission.filter(row => isDone(text(row, 'Status'))).length
+  const submissionReadiness = submission.length ? Math.round((completedSubmission / submission.length) * 100) : 0
+  const missingEvidence = submission.filter(row => !text(row, 'Drive_File_ID') && !text(row, 'Evidence_URL')).length
+  const progress = tasks.length ? Math.round((completedTasks / tasks.length) * 100) : 0
+  const deadlineEvents = events.map(row => ({ row, date: parseDate(text(row, 'Deadline_WIB')) })).filter(item => item.date).sort((left, right) => left.date!.getTime() - right.date!.getTime())
+
+  return { activeEvents, openTasks, completedTasks, blockedTasks, overdueTasks, dueSoonTasks, completedSubmission, submissionReadiness, missingEvidence, progress, deadlineEvents, totalTasks: tasks.length }
+}
 
 export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSubmission }: { initialEvents?: Row[]; initialTasks?: Row[]; initialSubmission?: Row[] }) => {
   const initialEventRows = useMemo(() => normalizeRows(initialEvents, fallbackEventRows), [initialEvents])
@@ -111,28 +139,7 @@ export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSu
   }, [loadWorkspace])
 
   const metrics = useMemo(() => {
-    const now = new Date()
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const activeEvents = events.filter(row => !isDone(text(row, 'Status'))).length
-    const openTasks = tasks.filter(row => !isDone(text(row, 'Status')))
-    const completedTasks = tasks.filter(row => isDone(text(row, 'Status'))).length
-    const blockedTasks = openTasks.filter(row => isRisk(text(row, 'Status'))).length
-
-    const overdueTasks = openTasks.filter(row => { const date = parseDate(text(row, 'Due_WIB'));
-
- return date ? date < now : false }).length
-
-    const dueSoonTasks = openTasks.filter(row => { const date = parseDate(text(row, 'Due_WIB'));
-
- return date ? date >= now && date <= nextWeek : false }).length
-
-    const completedSubmission = submission.filter(row => isDone(text(row, 'Status'))).length
-    const submissionReadiness = submission.length ? Math.round((completedSubmission / submission.length) * 100) : 0
-    const missingEvidence = submission.filter(row => !text(row, 'Drive_File_ID') && !text(row, 'Evidence_URL')).length
-    const progress = tasks.length ? Math.round((completedTasks / tasks.length) * 100) : 0
-    const deadlineEvents = events.map(row => ({ row, date: parseDate(text(row, 'Deadline_WIB')) })).filter(item => item.date).sort((left, right) => left.date!.getTime() - right.date!.getTime())
-
-    return { activeEvents, openTasks, completedTasks, blockedTasks, overdueTasks, dueSoonTasks, completedSubmission, submissionReadiness, missingEvidence, progress, deadlineEvents, totalTasks: tasks.length }
+    return calculateCommandCenterMetrics(events, tasks, submission)
   }, [events, submission, tasks])
 
   const attentionItems = useMemo(() => {

@@ -23,7 +23,7 @@ const HackathonsPage = () => (
         { key: 'Focus', label: 'Focus' },
         { key: 'Eligibility_Status', label: 'Eligibility' },
         { key: 'Verification_Status', label: 'Verification' },
-        { key: 'Drive_File_ID', label: 'Evidence', format: (_, row) => row.Drive_File_ID || row.Evidence_URL ? 'Linked' : 'Missing' }
+        { key: 'Drive_File_ID', label: 'Evidence', format: 'linked-status' }
       ]}
       fields={[
         { key: 'Event_Name', label: 'Event name' },
