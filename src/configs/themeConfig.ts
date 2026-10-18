@@ -1,6 +1,6 @@
 const themeConfig = {
-  templateName: 'AdminCN',
-  homePageUrl: '/dashboard/orders'
-} as const
+  templateName: "Hackathon OS",
+  homePageUrl: "/dashboard",
+} as const;
 
-export default themeConfig
+export default themeConfig;
