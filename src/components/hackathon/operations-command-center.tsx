@@ -29,6 +29,12 @@ const parseDate = (value: string) => {
 
 const dayDifference = (date: Date, now: Date) => Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
 
+const normalizeRows = (value: unknown, fallback: Row[] = []) => {
+  const candidate = Array.isArray(value) ? value : fallback
+
+  return candidate.filter(row => Boolean(row) && typeof row === 'object' && !Array.isArray(row)) as Row[]
+}
+
 const formatDate = (value: string) => {
   const date = parseDate(value)
 
@@ -37,17 +43,24 @@ const formatDate = (value: string) => {
 
 const loadSheetRows = async (sheet: string, fallback: Row[]) => {
   const response = await fetch(`/api/sheets/${sheet}`, { cache: 'no-store' })
-  const body = await response.json()
+  const body = await response.json() as { rows?: unknown; syncedAt?: unknown; message?: string }
 
   if (!response.ok) throw new Error(body.message ?? `Sheet ${sheet} tidak tersedia`)
 
-  return { rows: (body.rows ?? fallback) as Row[], syncedAt: String(body.syncedAt ?? '') }
+  return { rows: normalizeRows(body.rows, fallback), syncedAt: String(body.syncedAt ?? '') }
 }
 
-export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSubmission }: { initialEvents: Row[]; initialTasks: Row[]; initialSubmission: Row[] }) => {
-  const [events, setEvents] = useState<Row[]>(initialEvents)
-  const [tasks, setTasks] = useState<Row[]>(initialTasks)
-  const [submission, setSubmission] = useState<Row[]>(initialSubmission)
+const fallbackEventRows: Row[] = fallbackEvents.map(event => ({ Event_ID: event.id, Event_Name: event.name, Deadline_WIB: event.deadline, Verification_Status: event.verification, Status: event.status, Drive_Folder: event.driveFolder }))
+const fallbackTaskRows: Row[] = fallbackTasks.map(task => ({ Task_ID: task.id, Event_ID: task.eventId, Task: task.task, Workstream: task.workstream, Priority: task.priority, Due_WIB: task.due, Status: task.status }))
+const fallbackSubmissionRows: Row[] = submissionItems.map(item => ({ Checklist_ID: item.id, Event_ID: item.eventId, Requirement: item.requirement, Category: item.category, Status: item.status }))
+
+export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSubmission }: { initialEvents?: Row[]; initialTasks?: Row[]; initialSubmission?: Row[] }) => {
+  const initialEventRows = useMemo(() => normalizeRows(initialEvents, fallbackEventRows), [initialEvents])
+  const initialTaskRows = useMemo(() => normalizeRows(initialTasks, fallbackTaskRows), [initialTasks])
+  const initialSubmissionRows = useMemo(() => normalizeRows(initialSubmission, fallbackSubmissionRows), [initialSubmission])
+  const [events, setEvents] = useState<Row[]>(initialEventRows)
+  const [tasks, setTasks] = useState<Row[]>(initialTaskRows)
+  const [submission, setSubmission] = useState<Row[]>(initialSubmissionRows)
   const [integration, setIntegration] = useState<IntegrationState>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -58,9 +71,9 @@ export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSu
     setError('')
 
     const [eventResult, taskResult, submissionResult, integrationResult] = await Promise.allSettled([
-      loadSheetRows('events', initialEvents),
-      loadSheetRows('tasks', initialTasks),
-      loadSheetRows('submission', initialSubmission),
+      loadSheetRows('events', initialEventRows),
+      loadSheetRows('tasks', initialTaskRows),
+      loadSheetRows('submission', initialSubmissionRows),
       fetch('/api/integrations/status', { cache: 'no-store' }).then(async response => {
         const body = await response.json()
 
@@ -85,7 +98,7 @@ export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSu
     if (syncTimes.length) setLastSyncedAt(syncTimes.sort().at(-1) ?? '')
     if (errors.length) setError('Sebagian data belum tersinkron. Snapshot lokal dipakai untuk bagian yang gagal.')
     setLoading(false)
-  }, [initialEvents, initialSubmission, initialTasks])
+  }, [initialEventRows, initialSubmissionRows, initialTaskRows])
 
   // Sync once on mount and keep the command center current while it is open.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -204,7 +217,7 @@ export const OperationsCommandCenter = ({ initialEvents, initialTasks, initialSu
 }
 
 export const dashboardFallbackRows = {
-  events: fallbackEvents.map(event => ({ Event_ID: event.id, Event_Name: event.name, Deadline_WIB: event.deadline, Verification_Status: event.verification, Status: event.status, Drive_Folder: event.driveFolder })),
-  tasks: fallbackTasks.map(task => ({ Task_ID: task.id, Event_ID: task.eventId, Task: task.task, Workstream: task.workstream, Priority: task.priority, Due_WIB: task.due, Status: task.status })),
-  submission: submissionItems.map(item => ({ Checklist_ID: item.id, Event_ID: item.eventId, Requirement: item.requirement, Category: item.category, Status: item.status }))
+  events: fallbackEventRows,
+  tasks: fallbackTaskRows,
+  submission: fallbackSubmissionRows
 }
