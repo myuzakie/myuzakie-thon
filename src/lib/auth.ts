@@ -5,6 +5,10 @@ import { NextResponse } from 'next/server'
 
 const sessionCookieName = 'hackathon_session'
 const sessionLifetimeSeconds = 60 * 60 * 12
+const loginWindowMs = 15 * 60 * 1000
+const maxLoginAttempts = 5
+
+const loginAttempts = new Map<string, { count: number; startedAt: number }>()
 
 type SessionPayload = {
   email: string
@@ -62,6 +66,34 @@ export const authenticateCredentials = (email: string, password: string) => {
   const received = Buffer.from(password)
 
   return expected.length === received.length && timingSafeEqual(expected, received)
+}
+
+export const getLoginIdentifier = (request: Request, email: string) => `${request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? 'unknown'}:${email.toLowerCase()}`
+
+export const getLoginRateLimit = (identifier: string) => {
+  const attempt = loginAttempts.get(identifier)
+  const now = Date.now()
+
+  if (!attempt || now - attempt.startedAt >= loginWindowMs) {
+    loginAttempts.set(identifier, { count: 0, startedAt: now })
+
+    return { allowed: true, retryAfterSeconds: 0 }
+  }
+
+  const retryAfterSeconds = Math.ceil((attempt.startedAt + loginWindowMs - now) / 1000)
+
+  return { allowed: attempt.count < maxLoginAttempts, retryAfterSeconds }
+}
+
+export const registerLoginFailure = (identifier: string) => {
+  const current = getLoginRateLimit(identifier)
+  const attempt = loginAttempts.get(identifier) ?? { count: 0, startedAt: Date.now() }
+
+  loginAttempts.set(identifier, { ...attempt, count: current.allowed ? attempt.count + 1 : attempt.count })
+}
+
+export const clearLoginFailures = (identifier: string) => {
+  loginAttempts.delete(identifier)
 }
 
 export const sessionCookieOptions = {

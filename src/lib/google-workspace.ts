@@ -177,7 +177,7 @@ const findRecord = async (sheet: SheetKey, id: string) => {
   return { config, headers: nextHeaders, row, rowNumber: rowIndex + 2, version: rowToRecord(nextHeaders, row, rowIndex + 2)._version as string, record: rowToRecord(nextHeaders, row, rowIndex + 2) }
 }
 
-type MutationOptions = { updatedBy?: string; expectedVersion?: string }
+type MutationOptions = { updatedBy?: string; expectedVersion?: string; force?: boolean }
 
 const now = () => new Date().toISOString()
 
@@ -233,7 +233,7 @@ const assertCurrentVersion = (expectedVersion: string | undefined, found: Awaite
 export const updateSheetRecord = async (sheet: SheetKey, id: string, changes: Record<string, unknown>, options: MutationOptions = {}) => {
   const found = await findRecord(sheet, id)
 
-  assertCurrentVersion(options.expectedVersion, found)
+  if (!options.force) assertCurrentVersion(options.expectedVersion, found)
   if (Object.prototype.hasOwnProperty.call(changes, found.config.idHeader) && String(changes[found.config.idHeader]) !== id) throw new GoogleWorkspaceError(`${found.config.idHeader} adalah primary key dan tidak dapat diubah.`, 400)
   const timestamp = now()
   const nextHeaders = await ensureHeaders(sheet, found.headers, [...stableMetadataHeaders, ...Object.keys(changes)])
@@ -324,6 +324,49 @@ export const appendAuditLog = async ({ action, sheet, recordId, updatedBy, befor
     After_JSON: after ? JSON.stringify(after) : '',
     Conflict_Status: conflictStatus ?? 'none'
   }, { updatedBy })
+}
+
+const migrationHeaders = ['Created_At', 'Updated_At', 'Updated_By', 'Record_Status', 'Last_Synced_At']
+
+export const migrateSheetMetadata = async (sheet: SheetKey, updatedBy = 'migration') => {
+  const { config, headers, values } = await getSheetValues(sheet)
+  const requiredHeaders = sheet === 'audit' ? [...stableMetadataHeaders, ...auditHeaders] : stableMetadataHeaders
+  const nextHeaders = await ensureHeaders(sheet, headers, requiredHeaders)
+  const idIndex = nextHeaders.indexOf(config.idHeader)
+  const timestamp = now()
+  const updates: Array<{ range: string; values: string[][] }> = []
+  let migratedRows = 0
+
+  values.forEach((row, index) => {
+    if (idIndex < 0 || !String(row[idIndex] ?? '').trim()) return
+
+    const rowNumber = index + 2
+    let changed = false
+
+    migrationHeaders.forEach(header => {
+      const columnIndex = nextHeaders.indexOf(header)
+
+      if (columnIndex < 0 || String(row[columnIndex] ?? '').trim()) return
+
+      const value = header === 'Updated_By' ? updatedBy : header === 'Record_Status' ? 'Active' : timestamp
+
+      updates.push({ range: `${config.title}!${toColumnLabel(columnIndex)}${rowNumber}`, values: [[value]] })
+      changed = true
+    })
+
+    if (changed) migratedRows += 1
+  })
+
+  if (updates.length > 0) {
+    await googleRequest({
+      url: sheetsUrl('/values:batchUpdate'),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: { valueInputOption: 'USER_ENTERED', data: updates }
+    })
+  }
+
+  return { sheet, addedHeaders: nextHeaders.filter(header => !headers.includes(header)), migratedRows, migratedAt: timestamp }
 }
 
 export const googleSheetId = getSpreadsheetId

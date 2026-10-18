@@ -69,11 +69,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
 
   try {
     const sheet = await getSheetKey(params)
-    const body = (await request.json()) as { id?: string; expectedVersion?: string; changes?: Record<string, unknown> }
+    const body = (await request.json()) as { id?: string; expectedVersion?: string; force?: boolean; changes?: Record<string, unknown> }
 
     if (!body.id || !body.changes) return NextResponse.json({ error: 'id dan changes wajib diisi' }, { status: 400 })
 
-    const result = await updateSheetRecord(sheet, body.id, body.changes, { expectedVersion: body.expectedVersion, updatedBy: session.email })
+    const result = await updateSheetRecord(sheet, body.id, body.changes, { expectedVersion: body.expectedVersion, force: body.force, updatedBy: session.email })
 
     if (sheet !== 'audit') await appendAuditLog({ action: 'update', sheet, recordId: body.id, updatedBy: session.email, before: result.before, after: result.record })
 

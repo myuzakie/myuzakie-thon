@@ -101,6 +101,13 @@ export const submissionItems = [
   { id: 'SC-009', eventId: 'HACK-002', requirement: 'Public GitLab repo and MIT license', category: 'Repository', status: 'Not Started' }
 ]
 
+export const dashboardMetrics = [
+  { Metric: 'Active_Hackathons', Value: '2', Description: '1 primer · 1 cadangan' },
+  { Metric: 'Active_Project', Value: '1', Description: 'Hackathon Command Center' },
+  { Metric: 'Days_To_Next_Deadline', Value: '14', Description: 'Menuju akhir Oktober' },
+  { Metric: 'Submission_Readiness', Value: '62%', Description: 'On track' }
+]
+
 export const project = {
   name: 'Hackathon Command Center',
   repository: 'https://github.com/myuzakie/myuzakie-thon',

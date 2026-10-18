@@ -16,8 +16,9 @@ import type { SheetKey } from '@/lib/google-workspace'
 
 type Row = Record<string, string | number>
 type Field = { key: string; label: string; placeholder?: string; multiline?: boolean }
+type ConflictState = { id: string; currentRecord: Row | null }
 
-export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRows, driveUploads = false, filterKey }: { sheet: SheetKey; idKey: string; title: string; columns: Array<{ key: string; label: string }>; fields: Field[]; initialRows: Row[]; driveUploads?: boolean; filterKey?: string }) => {
+export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRows, driveUploads = false, filterKey, autoSyncIntervalMs = 60000 }: { sheet: SheetKey; idKey: string; title: string; columns: Array<{ key: string; label: string }>; fields: Field[]; initialRows: Row[]; driveUploads?: boolean; filterKey?: string; autoSyncIntervalMs?: number }) => {
   const [rows, setRows] = useState<Row[]>(initialRows)
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
@@ -31,6 +32,7 @@ export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRo
   const [sort, setSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: idKey, direction: 'asc' })
   const [saving, setSaving] = useState(false)
   const [lastSyncedAt, setLastSyncedAt] = useState('')
+  const [conflict, setConflict] = useState<ConflictState | null>(null)
   const pageSize = 8
 
   const loadRows = useCallback(async () => {
@@ -55,6 +57,14 @@ export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRo
   // The first read is an external synchronization with Google Sheets.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadRows() }, [loadRows])
+
+  useEffect(() => {
+    if (!autoSyncIntervalMs) return
+
+    const interval = window.setInterval(() => { void loadRows() }, autoSyncIntervalMs)
+
+    return () => window.clearInterval(interval)
+  }, [autoSyncIntervalMs, loadRows])
 
   const filterOptions = useMemo(() => filterKey ? Array.from(new Set(rows.map(row => String(row[filterKey] ?? '')).filter(Boolean))).sort((left, right) => left.localeCompare(right)) : [], [filterKey, rows])
 
@@ -89,20 +99,20 @@ export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRo
     setDialogOpen(true)
   }
 
-  const save = async () => {
+  const save = async (force = false) => {
     setSaving(true)
     setSyncError('')
 
     try {
       const id = editing?.[idKey] ? String(editing[idKey]) : ''
       const record = editing ? { [idKey]: id, ...form } : form
-      const response = await fetch(`/api/sheets/${sheet}`, { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editing ? { id, expectedVersion: editing._version, changes: form } : { record }) })
+      const response = await fetch(`/api/sheets/${sheet}`, { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editing ? { id, expectedVersion: editing._version, force, changes: form } : { record }) })
       const body = await response.json()
 
       if (!response.ok) {
         if (response.status === 409) {
-          setSyncError('Conflict terdeteksi: record berubah langsung di Google Sheets. Data terbaru sudah dimuat; tinjau ulang sebelum menyimpan.')
-          await loadRows()
+          setConflict({ id, currentRecord: body.details?.currentRecord ?? null })
+          setSyncError('Conflict terdeteksi: record berubah langsung di Google Sheets. Pilih data terbaru atau overwrite dengan perubahan Anda.')
 
           return
         }
@@ -122,7 +132,7 @@ export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRo
   const remove = async (row: Row) => {
     const id = String(row[idKey] ?? '')
 
-    if (!id || !window.confirm(`Hapus ${id}? Baris akan dikosongkan di Google Sheets.`)) return
+    if (!id || !window.confirm(`Hapus ${id}? Record akan ditandai Deleted di Google Sheets.`)) return
     const response = await fetch(`/api/sheets/${sheet}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, expectedVersion: row._version }) })
     const body = await response.json()
 
@@ -131,6 +141,12 @@ export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRo
       if (response.status === 409) await loadRows()
     }
     else await loadRows()
+  }
+
+  const discardConflict = async () => {
+    setConflict(null)
+    setDialogOpen(false)
+    await loadRows()
   }
 
   return (
@@ -147,6 +163,7 @@ export const LiveSheetTable = ({ sheet, idKey, title, columns, fields, initialRo
         <div className='flex items-center justify-between gap-3 border-t pt-3'><span className='text-muted-foreground text-xs'>{filteredRows.length} records · page {safePage} / {pageCount}</span><div className='flex gap-1'><Button variant='outline' size='icon-sm' onClick={() => setPage(current => Math.max(1, current - 1))} disabled={safePage === 1}><ChevronLeft className='size-4' /></Button><Button variant='outline' size='icon-sm' onClick={() => setPage(current => Math.min(pageCount, current + 1))} disabled={safePage === pageCount}><ChevronRight className='size-4' /></Button></div></div>
       </CardContent>
       <Dialog open={detail !== null} onOpenChange={open => { if (!open) setDetail(null) }}><DialogContent><DialogHeader><DialogTitle>Record detail</DialogTitle><DialogDescription>Data item dari {title}.</DialogDescription></DialogHeader><div className='max-h-[60vh] space-y-3 overflow-y-auto'>{detail && Object.entries(detail).filter(([key]) => key !== '_rowNumber').map(([key, value]) => <div key={key} className='border-b pb-2'><p className='text-muted-foreground text-xs'>{key.replaceAll('_', ' ')}</p><p className='break-words text-sm'>{String(value || '—')}</p></div>)}</div><DialogFooter><Button variant='outline' onClick={() => setDetail(null)}>Close</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={conflict !== null} onOpenChange={open => { if (!open) void discardConflict() }}><DialogContent><DialogHeader><DialogTitle>Conflict detected</DialogTitle><DialogDescription>Google Sheets berubah setelah data ini dibuka. Pilih apakah akan menggunakan data terbaru atau menimpa dengan perubahan dari web.</DialogDescription></DialogHeader><div className='max-h-64 space-y-3 overflow-y-auto rounded-md border p-3'>{conflict?.currentRecord && Object.keys(form).map(key => <div key={key} className='grid gap-1 text-sm sm:grid-cols-2'><div><p className='text-muted-foreground text-xs'>Perubahan web · {key}</p><p className='break-words'>{form[key] || '—'}</p></div><div><p className='text-muted-foreground text-xs'>Versi Sheets</p><p className='break-words'>{String(conflict.currentRecord?.[key] ?? '—')}</p></div></div>)}</div><DialogFooter><Button variant='outline' onClick={() => void discardConflict()}>Use latest Sheets data</Button><Button onClick={() => { setConflict(null); void save(true) }} disabled={saving}>{saving && <Loader2 className='size-4 animate-spin' />}Overwrite Sheets</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogContent><DialogHeader><DialogTitle>{editing ? 'Edit record' : 'Tambah record'}</DialogTitle><DialogDescription>Perubahan akan ditulis ke Google Sheets saat integration server aktif.</DialogDescription></DialogHeader><div className='max-h-[60vh] space-y-4 overflow-y-auto'>{fields.map(field => <div key={field.key} className='space-y-2'><Label htmlFor={`field-${field.key}`}>{field.label}</Label>{field.multiline ? <Textarea id={`field-${field.key}`} value={form[field.key] ?? ''} placeholder={field.placeholder} onChange={event => setForm(current => ({ ...current, [field.key]: event.target.value }))} /> : <Input id={`field-${field.key}`} value={form[field.key] ?? ''} placeholder={field.placeholder} onChange={event => setForm(current => ({ ...current, [field.key]: event.target.value }))} />}</div>)}</div><DialogFooter><DialogClose render={<Button variant='outline' />}>Cancel</DialogClose><Button onClick={() => void save()} disabled={saving}>{saving && <Loader2 className='size-4 animate-spin' />}Save changes</Button></DialogFooter></DialogContent></Dialog>
     </Card>
   )

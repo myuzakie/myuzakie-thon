@@ -4,6 +4,14 @@ import { getSessionFromRequest, sameOriginResponse, unauthorizedResponse } from 
 import { appendAuditLog, attachDriveFileToSheet, GoogleWorkspaceError, uploadDriveFile } from '@/lib/google-workspace'
 
 export const runtime = 'nodejs'
+const maxUploadBytes = 100 * 1024 * 1024
+const allowedExtensions = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'mp4', 'webm', 'mov', 'avi', 'mkv', 'pdf', 'md', 'txt', 'json', 'zip', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'])
+
+const isAllowedFile = (file: File) => {
+  const extension = file.name.toLowerCase().split('.').pop() ?? ''
+
+  return file.type.startsWith('image/') || file.type.startsWith('video/') || file.type === 'application/pdf' || file.type === 'application/json' || file.type === 'application/zip' || file.type.startsWith('text/') || allowedExtensions.has(extension)
+}
 
 export async function POST(request: Request) {
   const originError = sameOriginResponse(request)
@@ -19,12 +27,15 @@ export async function POST(request: Request) {
     const file = formData.get('file')
 
     if (!(file instanceof File)) return NextResponse.json({ error: 'file wajib diisi' }, { status: 400 })
+    if (file.size > maxUploadBytes) return NextResponse.json({ error: 'file_too_large', message: 'Ukuran file maksimal 100 MB.' }, { status: 413 })
+    if (!isAllowedFile(file)) return NextResponse.json({ error: 'file_type_not_allowed', message: 'Tipe file tidak didukung untuk evidence.' }, { status: 415 })
 
     const folderId = String(formData.get('folderId') || '') || undefined
     const sheet = String(formData.get('sheet') || '') as Parameters<typeof attachDriveFileToSheet>[0]['sheet']
     const rowId = String(formData.get('rowId') || '')
     const expectedVersion = String(formData.get('expectedVersion') || '') || undefined
-    const uploaded = await uploadDriveFile({ fileName: file.name, mimeType: file.type || 'application/octet-stream', buffer: Buffer.from(await file.arrayBuffer()), folderId })
+    const fileName = file.name.replace(/[\\/\0]/g, '_').slice(0, 180) || 'evidence-upload'
+    const uploaded = await uploadDriveFile({ fileName, mimeType: file.type || 'application/octet-stream', buffer: Buffer.from(await file.arrayBuffer()), folderId })
 
     let linkedRow = null
 

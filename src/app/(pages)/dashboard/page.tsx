@@ -1,29 +1,22 @@
 import {
   ArrowUpRight,
-  CalendarClock,
   CheckCircle2,
   CircleAlert,
   CircleDot,
   ExternalLink,
-  FolderKanban,
   GitBranch,
   Lightbulb,
   Plus,
-  Trophy
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { LiveOperationsDashboard } from '@/components/hackathon/live-operations-dashboard'
+import { LiveSheetTable } from '@/components/hackathon/live-sheet-table'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-
-const stats = [
-  { label: 'Hackathon aktif', value: '2', detail: '1 primer · 1 cadangan', icon: Trophy },
-  { label: 'Project berjalan', value: '1', detail: 'Hackathon Command Center', icon: FolderKanban },
-  { label: 'Hari tersisa', value: '14', detail: 'Menuju akhir Oktober', icon: CalendarClock },
-  { label: 'Submission readiness', value: '62%', detail: 'On track', icon: CheckCircle2 }
-]
+import { dashboardMetrics } from '@/lib/hackathon-data'
 
 const deadlines = [
   { title: 'CreateAThon — AI Agent Context', date: '31 Okt 2026', meta: 'Devpost · 14 hari lagi', status: 'On track' },
@@ -51,24 +44,8 @@ const DashboardPage = () => {
         <Button className='w-fit gap-2'><Plus className='size-4' /> Tambah hackathon</Button>
       </section>
 
-      <section className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-        {stats.map(stat => {
-          const Icon = stat.icon
-
-          return (
-            <Card key={stat.label} className='shadow-none'>
-              <CardContent className='flex items-start justify-between gap-3 p-5'>
-                <div className='space-y-2'>
-                  <p className='text-muted-foreground text-sm'>{stat.label}</p>
-                  <p className='text-3xl font-semibold tracking-tight'>{stat.value}</p>
-                  <p className='text-muted-foreground text-xs'>{stat.detail}</p>
-                </div>
-                <div className='bg-muted rounded-md p-2.5'><Icon className='size-4' /></div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </section>
+      <LiveOperationsDashboard initialRows={dashboardMetrics} />
+      <LiveSheetTable sheet='dashboard' idKey='Metric' title='Operations dashboard records' columns={[{ key: 'Metric', label: 'Metric' }, { key: 'Value', label: 'Value' }, { key: 'Description', label: 'Description' }]} fields={[{ key: 'Value', label: 'Value' }, { key: 'Description', label: 'Description', multiline: true }]} initialRows={dashboardMetrics} />
 
       <section className='grid gap-4 xl:grid-cols-[1.35fr_1fr]'>
         <Card className='shadow-none'>
